@@ -1,7 +1,12 @@
 import carImg from '@/assets/images/normal-vehicle.png'
 import activeCarImg from '@/assets/images/activated-vehicle.png'
 import { transformFromWGSToGCJ } from './WSCoordinate'
-import { loadDOMOverlay } from './CustomDOMOverlay.js'
+import { loadDOMOverlay } from './CustomDOMOverlay'
+import { 
+  CarType, 
+  LatLngLocation,
+  StationType
+} from './type'
 
 type Options = {
   el: HTMLElement;
@@ -13,13 +18,14 @@ class TMapHandler {
   mapIns: TMap.Map | null
   carMarkerLayer: TMap.MultiMarker | null
   polylineLayer: TMap.MultiPolyline | null
-  prevCarGeo: TMap.Geometry | null
+  prevCarGeo: TMap.PointGeometry | null
   gid: number
   paths: any[]
   carMarkerMap: Record<string, any>
   carInfoMarkerMap: Record<string, any>
   stationMarkerMap: Record<string, any>
   circleMarkerMap: Record<string, any>
+  DOMOverlay: any
 
   constructor(options: Options) {
     this.options = options || {}
@@ -34,6 +40,7 @@ class TMapHandler {
     this.carInfoMarkerMap = Object.create(null)
     this.stationMarkerMap = Object.create(null)
     this.circleMarkerMap = Object.create(null)
+    this.DOMOverlay = null
   }
 
   load() {
@@ -79,9 +86,9 @@ class TMapHandler {
       id: 'marker-layer', // 图层唯一标识
       map: this.mapIns!,  //指定地图容器
     })
-    this.carMarkerLayer.on('click', (evt: TMap.GeometryOverlayEvent) => {
-      const cb = evt.geometry.cb
-      if (evt.geometry.id !== this.prevCarGeo.id) {
+    this.carMarkerLayer.on('click', (evt: TMap.GeometryOverlayEvent<TMap.PointGeometry>) => {
+      const cb = evt.geometry.properties?.cb
+      if (evt.geometry.id !== this.prevCarGeo?.id) {
         this.activeCurrCar(evt.geometry.id)
         cb && cb(evt.geometry.properties)
       }
@@ -91,7 +98,7 @@ class TMapHandler {
   initPolylineLayer() {
 	  this.polylineLayer = new TMap.MultiPolyline({
       id: 'polyline-layer', // 图层唯一标识
-      map: this.mapIns,
+      map: this.mapIns!,
       styles: {
         blue: new TMap.PolylineStyle({
           color: '#409EFF', //线填充色
@@ -111,8 +118,8 @@ class TMapHandler {
     });
   }
 
-  setCarStyles(data) {
-    const styles = {}
+  setCarStyles(data: CarType[] = []) {
+    const styles: TMap.MultiMarkerStyleHash = {}
     data.forEach(item => {
       styles['default-' + item.vehicleCode] = new TMap.MarkerStyle({
         width: 45,  // 点标记样式宽度（像素）
@@ -129,10 +136,10 @@ class TMapHandler {
         rotate: +item.azimuth + 180,
       })
     })
-    this.carMarkerLayer.setStyles(styles)
+    this.carMarkerLayer!.setStyles(styles)
   }
 
-  renderCarMarkers(data = [], clickedCb) {
+  renderCarMarkers(data: CarType[], clickedCb: () => void) {
     data = data.filter((item) =>
       item.longitude && item.latitude && 
       item.longitude !== '0.0' && item.latitude !== '0.0'
@@ -147,14 +154,14 @@ class TMapHandler {
       const geometry = this.carMarkerMap[item.vehicleCode]
       if (geometry) { // update
         const position = this.getLngLat(item)
-        const diffLat = position.lat - geometry.position.lat
-        const diffLng = position.lng - geometry.position.lng
+        const diffLat = position!.lat - geometry.position.lat
+        const diffLng = position!.lng - geometry.position.lng
         geometry.position = position
         geometry.properties = item
         if (geometry.rank !== Infinity) {
           geometry.rank = ++this.gid
         }
-        this.carMarkerLayer.updateGeometries([geometry])
+        this.carMarkerLayer!.updateGeometries([geometry])
         // if (diffLat !== 0 || diffLng !== 0) {
         //   console.log(1)
         //   this.carMarkerLayer.moveAlong({
@@ -172,13 +179,12 @@ class TMapHandler {
         const carGeometry = {
           id: item.vehicleCode,
           styleId: 'default-' + item.vehicleCode,
-          position: this.getLngLat(item),
-          properties: item,
+          position: this.getLngLat(item)!,
+          properties: { ...item, cb: clickedCb },
           rank: ++this.gid, // 标注点的图层内绘制顺序
-          cb: clickedCb,
         }
         this.carMarkerMap[item.vehicleCode] = carGeometry
-        this.carMarkerLayer.add([carGeometry])
+        this.carMarkerLayer!.add([carGeometry])
 
         const carInfoMarker = new WinInfoMarkerOverlay({
           id: item.vehicleCode,
@@ -191,36 +197,36 @@ class TMapHandler {
     })
   }
 
-  renderPath(data, siteId) {
+  renderPath(data: LatLngLocation[], siteId: string) {
     if (data.length) {
       this.siteId = siteId
       const paths = data.map(item => this.getLngLat(item))
-      const geometries = this.polylineLayer.getGeometries()
+      const geometries = this.polylineLayer!.getGeometries()
       const blueGeometry = [
         {
           id: siteId, // 折线唯一标识，删除时使用
           styleId: 'blue',// 绑定样式名
-          paths: paths,
+          paths: paths as TMap.LatLng[],
         }
       ]
       const deeplyBlueGeometry = [{
         id: siteId,
         styleId: 'deeply-blue',
-        paths: paths,
+        paths: paths as TMap.LatLng[],
       }]
       if (geometries.length) { // update
-        this.polylineLayer.updateGeometries(deeplyBlueGeometry)
+        this.polylineLayer!.updateGeometries(deeplyBlueGeometry)
         setTimeout(() => {
-          this.polylineLayer.updateGeometries(blueGeometry)
+          this.polylineLayer!.updateGeometries(blueGeometry)
         }, 100)
       } else { // add
-        this.polylineLayer.add(blueGeometry)
+        this.polylineLayer!.add(blueGeometry)
       }
       this.paths = paths
     }
   }
 
-  renderStationMarkers(data) {
+  renderStationMarkers(data: StationType[]) {
     const { WinInfoMarkerOverlay, CircleMarkerOverlay } = this.DOMOverlay
     data.forEach(item => {
       if (!this.stationMarkerMap[item.stationId]) {
@@ -234,10 +240,10 @@ class TMapHandler {
           position: this.getLngLat(item),
         })
         circleMarker.on('mouseover', () => {
-          stationMarker.setVisible(true)
+          stationMarker.setDOMVisible(true)
         })
         circleMarker.on('mouseout', () => {
-          stationMarker.setVisible(false)
+          stationMarker.setDOMVisible(false)
         })
         this.stationMarkerMap[item.stationId] = stationMarker
         this.circleMarkerMap[item.stationId] = circleMarker
@@ -245,7 +251,7 @@ class TMapHandler {
     })
   }
 
-  activeCurrCar(vehicleCode) {
+  activeCurrCar(vehicleCode: string) {
     const currGeometry = this.carMarkerMap[vehicleCode]
     const currCarInfoMarker = this.carInfoMarkerMap[vehicleCode]
     
@@ -253,26 +259,26 @@ class TMapHandler {
       const prevVehicleCode = this.prevCarGeo.id
       const prevGeometry = this.carMarkerMap[prevVehicleCode]
       const prevCarInfoMarker = this.carInfoMarkerMap[prevVehicleCode]
-      prevCarInfoMarker.setVisible(false)
+      prevCarInfoMarker.setDOMVisible(false)
       prevGeometry.styleId = 'default-' + prevVehicleCode
       prevGeometry.rank = ++this.gid
     }
     if (currGeometry) {
       currGeometry.styleId = 'active-' + vehicleCode
       currGeometry.rank = Infinity
-      currCarInfoMarker.setVisible(true)
-      this.carMarkerLayer.updateGeometries([currGeometry])
+      currCarInfoMarker.setDOMVisible(true)
+      this.carMarkerLayer!.updateGeometries([currGeometry])
       this.prevCarGeo = currGeometry
     }
   }
 
-  toggleStations(visible) {
+  toggleStations(visible: boolean) {
     for (let key in this.stationMarkerMap) {
-      this.stationMarkerMap[key].setVisible(visible)
+      this.stationMarkerMap[key].setDOMVisible(visible)
     }
   }
 
-  getCarMarker(vehicleCode) {
+  getCarMarker(vehicleCode: string) {
     return this.carMarkerMap[vehicleCode]
   }
 
@@ -287,8 +293,8 @@ class TMapHandler {
       this.circleMarkerMap[key].destroy()
     }
     const ids = Object.keys(this.carMarkerMap)
-    this.carMarkerLayer.remove(ids)
-    this.polylineLayer.remove(this.siteId)
+    this.carMarkerLayer!.remove(ids)
+    this.polylineLayer!.remove([this.siteId])
 
     this.carMarkerMap = Object.create(null)
     this.carInfoMarkerMap = Object.create(null)
@@ -298,17 +304,17 @@ class TMapHandler {
 
   /**
    * 经纬度转换
-   * @param {object} location { longitude: number | string, latitude: number | string }
+   * @param {object} location { longitude: number | string, latitude: number | string, ... }
    * @return TMap.LatLng
    */
-  getLngLat(location) {
+  getLngLat(location: LatLngLocation) {
     const { longitude, latitude } = location
     if (!longitude || !latitude) {
-      console.warn('[Position Warn]: 经度或纬度缺失', position)
+      console.warn('[Position Warn]: 经度或纬度缺失', location)
       return
     }
-    location = transformFromWGSToGCJ(+longitude, +latitude)
-    return new TMap.LatLng(location.latitude, location.longitude)
+    const position = transformFromWGSToGCJ(+longitude, +latitude)
+    return new TMap.LatLng(position.latitude, position.longitude)
   }
 
   // 设置自适应显示marker
@@ -325,7 +331,7 @@ class TMapHandler {
         }
       })
       //设置地图可视范围
-      this.mapIns.fitBounds(bounds, {
+      this.mapIns!.fitBounds(bounds, {
         padding: 100 // 自适应边距
       });
     }
@@ -334,11 +340,11 @@ class TMapHandler {
   hiddenMapIcon() {
     // 隐藏除信息窗体以外不必要的内容
     const a = document.querySelector('canvas+div:last-child');
-    const div = a.children[a.childElementCount - 1];
+    const div = a!.children[a!.childElementCount - 1] as HTMLElement;
     div.style.display = 'none';
 
     const canvas = document.querySelector('canvas');
-    canvas.style.position = 'absolute'
+    canvas!.style.position = 'absolute'
   }
 }
 

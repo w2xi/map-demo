@@ -1,4 +1,7 @@
-import { Location } from './type'
+type LatLng = {
+  latitude: number;
+  longitude: number;
+}
 
 /**
  *  判断经纬度是否超出中国境内
@@ -13,7 +16,7 @@ function isLocationOutOfChina(latitude: number, longitude: number): boolean {
 /**
  *  将WGS-84(国际标准)转为GCJ-02(火星坐标):
  */
-function transformFromWGSToGCJ(latitude: number, longitude: number): Location {
+function transformFromWGSToGCJ(latitude: number, longitude: number): LatLng {
   //var lat = "";
   //var lon = "";
   var ee = 0.00669342162296594323;
@@ -45,7 +48,7 @@ function transformFromWGSToGCJ(latitude: number, longitude: number): Location {
 /**
  *  将GCJ-02(火星坐标)转为百度坐标:
  */
-function transformFromGCJToBaidu(latitude: number, longitude: number): Location {
+function transformFromGCJToBaidu(latitude: number, longitude: number): LatLng {
   var pi = 3.14159265358979324 * 3000.0 / 180.0;
 
   var z = Math.sqrt(longitude * longitude + latitude * latitude) + 0.00002 * Math.sin(latitude * pi);
@@ -62,7 +65,7 @@ function transformFromGCJToBaidu(latitude: number, longitude: number): Location 
 /**
  *  将百度坐标转为GCJ-02(火星坐标):
  */
-function transformFromBaiduToGCJ(latitude: number, longitude: number): Location {
+function transformFromBaiduToGCJ(latitude: number, longitude: number): LatLng {
   var xPi = 3.14159265358979323846264338327950288 * 3000.0 / 180.0;
 
   var x = longitude - 0.0065;
@@ -81,7 +84,7 @@ function transformFromBaiduToGCJ(latitude: number, longitude: number): Location 
 /**
  *  将GCJ-02(火星坐标)转为WGS-84:
  */
-function transformFromGCJToWGS(latitude: number, longitude: number): Location | undefined {
+function transformFromGCJToWGS(latitude: number, longitude: number): LatLng | undefined {
   var threshold = 0.00001;
 
   // The boundary
@@ -131,7 +134,7 @@ function transformFromGCJToWGS(latitude: number, longitude: number): Location | 
 }
 
 
-function isContains(point: Location, p1: Location, p2: Location): boolean {
+function isContains(point: LatLng, p1: LatLng, p2: LatLng): boolean {
   return (point.latitude >= Math.min(p1.latitude, p2.latitude) && point.latitude <= Math.max(p1.latitude, p2.latitude)) && (point.longitude >= Math.min(p1.longitude, p2.longitude) && point.longitude <= Math.max(p1.longitude, p2.longitude));
 }
 
